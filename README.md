@@ -57,7 +57,7 @@ Follow [heltec guide](https://heltec-automation-docs.readthedocs.io/en/latest/cu
 You can also install Arduino extension in vscode for compiling and uploading code to the board.
 Arduino IDE still needs to be installed.
 
-![VS Code](resources/upload.png?raw=true)
+![VS Code](resources/vscode.png?raw=true)
 
 ## 3d printing
 
