@@ -11,7 +11,9 @@ Powered by Arduino, GPS and Long Range radio transmission.
 ### Arduino board
 
 The board is ASR6502 ([CubeCell GPS HTCC-AB02S](https://heltec-automation-docs.readthedocs.io/en/latest/cubecell/dev-board/htcc-ab02s/hardware_update_log.html#v1)).
+
 Amazon sells it as [MakerFocus LoRa GPS Module LoRaWAN 868 915mHz Development Board LoRa Kit Ultra Low Power Design CP2102 SX1262 ASR6502 Chip with 0.96 inch OLED Display](https://www.amazon.com/gp/product/B089YFZQQK/ref=ppx_yo_dt_b_asin_title_o05_s00?ie=UTF8&psc=1).
+
 And it contains:
 - AIR530 GPS module
 - SX1262 radio transciever
