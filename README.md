@@ -35,12 +35,13 @@ Follow [heltec guide](https://heltec-automation-docs.readthedocs.io/en/latest/cu
 
 - Download and install latest [Arduino IDE](https://www.arduino.cc/en/software)
 - Go to Preferences
-![Preferences](resources/pref.png?raw=true "Preferences")
-
+![Preferences](resources/pref.png?raw=true)
 - Add https://resource.heltec.cn/download/package_CubeCell_index.json to Additional Boards Manager Urls, press OK
+![Preferences Boards](resources/boards.png?raw=true)
 - Go Tools -> Boards Manager -> find CubeCell and install
-- Choose board in Tools -> Board -> CubeCell -> CubeCell GPS (HTCC-AB02S)
-
+![Install CubeCell library](resources/install.png?raw=true)
+- Select board in Tools -> Board -> CubeCell -> CubeCell GPS (HTCC-AB02S)
+![Select CubeCell GPS board](resources/htcc-ab02s.png?raw=true)
 
 ## 3d printing
 
