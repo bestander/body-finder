@@ -48,7 +48,7 @@ Follow [heltec guide](https://heltec-automation-docs.readthedocs.io/en/latest/cu
 ### Compiling code
 
 - Clone this repo `git clone git@github.com:bestander/body-finder.git`
-- Open body-finder in Arduino IDE: File -> Open ...
+- Open body-finder.ino in Arduino IDE: File -> Open ...
 - Connect the board to the computer and select USB port in Tools -> Port -> /dev/usbserial
 ![Select USB Port](resources/port.png?raw=true)
 - Press upload button in IDE
@@ -61,5 +61,6 @@ Arduino IDE still needs to be installed.
 
 ![VS Code](resources/vscode.png?raw=true)
 
-## 3d printing
+## 3d printing the case
 
+2BD
