@@ -45,12 +45,19 @@ Follow [heltec guide](https://heltec-automation-docs.readthedocs.io/en/latest/cu
 
 ### Compiling code
 
-- Clone this repo git@github.com:bestander/body-finder.git
-- Open body-finder in Arduino IDE
+- Clone this repo `git clone git@github.com:bestander/body-finder.git`
+- Open body-finder in Arduino IDE: File -> Open ...
 - Connect the board to the computer and select USB port in Tools -> Port -> /dev/usbserial
 ![Select USB Port](resources/port.png?raw=true)
-- Press upload button
+- Press upload button in IDE
 ![Upload](resources/upload.png?raw=true)
+
+### VS Code support
+
+You can also install Arduino extension in vscode for compiling and uploading code to the board.
+Arduino IDE still needs to be installed.
+
+![VS Code](resources/upload.png?raw=true)
 
 ## 3d printing
 
