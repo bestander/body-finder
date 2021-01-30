@@ -43,5 +43,14 @@ Follow [heltec guide](https://heltec-automation-docs.readthedocs.io/en/latest/cu
 - Select board in Tools -> Board -> CubeCell -> CubeCell GPS (HTCC-AB02S)
 ![Select CubeCell GPS board](resources/htcc-ab02s.png?raw=true)
 
+### Compiling code
+
+- Clone this repo git@github.com:bestander/body-finder.git
+- Open body-finder in Arduino IDE
+- Connect the board to the computer and select USB port in Tools -> Port -> /dev/usbserial
+![Select USB Port](resources/port.png?raw=true)
+- Press upload button
+![Upload](resources/upload.png?raw=true)
+
 ## 3d printing
 
