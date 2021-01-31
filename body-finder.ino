@@ -7,6 +7,7 @@
 #define RF_FREQUENCY 868000000 // Hz
 
 #define TX_OUTPUT_POWER 20 // dBm
+#define PARTICPANT 0       // 0 - 5
 
 #define LORA_BANDWIDTH 0        // [0: 125 kHz, \
                                 //  1: 250 kHz, \
@@ -23,14 +24,25 @@
 #define LORA_IQ_INVERSION_ON false
 
 #define RX_TIMEOUT_VALUE 1000
-#define BUFFER_SIZE 30 // Define the payload size here
 
-char txpacket[BUFFER_SIZE];
-char rxpacket[BUFFER_SIZE];
+typedef enum
+{
+  WAIT,
+  RX,
+  TX
+} RadioStates_t;
 
-static RadioEvents_t RadioEvents;
+RadioStates_t radioState;
 void OnTxDone(void);
 void OnTxTimeout(void);
+void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
+
+double buddyLattitudeData, buddyLongitudeData;
+int16_t txNumber = 0;
+
+#define BUFFER_SIZE 30 // Define the payload size here
+
+static RadioEvents_t RadioEvents;
 
 SSD1306Wire display(0x3c, 500000, I2C_NUM_0, GEOMETRY_128_64, GPIO10); // addr , freq , i2c group , resolution , rst
 
@@ -39,21 +51,8 @@ int fracPart(double val, int n)
   return abs((int)((val - (int)(val)) * pow(10, n)));
 }
 
-void VextON(void)
-{
-  pinMode(Vext, OUTPUT);
-  digitalWrite(Vext, LOW);
-}
-
-void VextOFF(void) //Vext default OFF
-{
-  pinMode(Vext, OUTPUT);
-  digitalWrite(Vext, HIGH);
-}
-
 void setup()
 {
-  VextON();
   delay(10);
 
   boardInitMcu();
@@ -83,19 +82,11 @@ void setup()
 
   Serial.begin(115200);
   Air530.begin();
+  radioState = WAIT;
 }
 
-void loop()
+void render()
 {
-  uint32_t starttime = millis();
-  while ((millis() - starttime) < 1000)
-  {
-    while (Air530.available() > 0)
-    {
-      Air530.encode(Air530.read());
-    }
-  }
-
   char str[30];
   display.clear();
   display.setFont(ArialMT_Plain_10);
@@ -107,7 +98,7 @@ void loop()
 
   index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
   str[index] = 0;
-  display.drawString(60, 0, str);
+  display.drawString(65, 0, str);
 
   index = sprintf(str, "lat:%d.%d lon:%d.%d",
                   (int)Air530.location.lat(),
@@ -117,38 +108,98 @@ void loop()
   str[index] = 0;
   display.drawString(0, 16, str);
 
-  index = sprintf(str, "Buddy: distance: %dm", 0);
-  str[index] = 0;
-  display.drawString(0, 32, str);
+  if (buddyLattitudeData != 0)
+  {
+    index = sprintf(str, "Buddy: distance: %dm", 0);
+    str[index] = 0;
+    display.drawString(0, 32, str);
 
-  index = sprintf(str, "lat:%d.%d lon:%d.%d",
-                  (int)Air530.location.lat(),
-                  fracPart(Air530.location.lat(), 4),
-                  (int)Air530.location.lng(),
-                  fracPart(Air530.location.lng(), 4));
-  display.drawString(0, 48, str);
-
+    index = sprintf(str, "lat:%d.%d lon:%d.%d",
+                    (int)buddyLattitudeData,
+                    fracPart(buddyLattitudeData, 4),
+                    0,
+                    0);
+    display.drawString(0, 48, str);
+  }
+  if (radioState == TX)
+  {
+    index = sprintf(str, "TX");
+    str[index] = 0;
+    display.drawString(112, 0, str);
+  }
+  if (radioState == RX)
+  {
+    index = sprintf(str, "RX");
+    str[index] = 0;
+    display.drawString(112, 0, str);
+  }
   display.display();
+}
+
+void loop()
+{
+  Radio.IrqProcess();
+  uint32_t starttime = millis();
+  while ((millis() - starttime) < 1000)
+  {
+    while (Air530.available() > 0)
+    {
+      Air530.encode(Air530.read());
+    }
+  }
+  uint8_t minTxSeconds = PARTICPANT * 10;
+  uint8_t maxTxSeconds = minTxSeconds + 10;
+  uint8_t seconds = Air530.time.second();
+  if (seconds > minTxSeconds && seconds < maxTxSeconds)
+  {
+    if (radioState != TX)
+    {
+      radioState = TX;
+      txNumber++;
+      // TODO serialize Air530.location.rawLat() and Air530.location.rawLon() into data[]
+      uint8_t data[4];
+      data[0] = 0;
+      data[1] = 1;
+      data[2] = 2;
+      data[3] = 3;
+      Radio.Send((uint8_t *)data, sizeof(data));
+    }
+  }
+  else
+  {
+    if (radioState != RX)
+    {
+      radioState = RX;
+      Serial.println("into RX mode");
+      Radio.Rx(0);
+    }
+  }
+
+  render();
 }
 
 void OnTxDone(void)
 {
   Serial.print("TX done!");
-  // turnOnRGB(0, 0);
+  Radio.Rx(0);
+  radioState = RX;
 }
 
 void OnTxTimeout(void)
 {
-  Radio.Sleep();
   Serial.print("TX Timeout......");
-  // state=ReadVoltage;
+  radioState = WAIT;
 }
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-  rssi = rssi;
+  // TODO parse payload
+  //  buddyLattitudeData = rawLatData.deg + rawLatData.billionths / 1000000000.0;
+  //  buddyLongitudeData = rawLonData.deg + rawLonData.billionths / 1000000000.0;
+  char rxpacket[BUFFER_SIZE];
   memcpy(rxpacket, payload, size);
   rxpacket[size] = '\0';
   Radio.Sleep();
   Serial.printf("\r\nreceived packet \"%s\" with rssi %d , length %d\r\n", rxpacket, rssi, size);
+  radioState = WAIT;
 }
