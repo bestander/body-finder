@@ -38,7 +38,6 @@ void OnTxTimeout(void);
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
 
 double buddyLattitudeData, buddyLongitudeData;
-int16_t txNumber = 0;
 
 #define BUFFER_SIZE 30 // Define the payload size here
 
@@ -100,25 +99,29 @@ void render()
   str[index] = 0;
   display.drawString(65, 0, str);
 
+  double lattitude = Air530.location.lat();
+  double longitude = Air530.location.lng();
   index = sprintf(str, "lat:%d.%d lon:%d.%d",
-                  (int)Air530.location.lat(),
-                  fracPart(Air530.location.lat(), 4),
-                  (int)Air530.location.lng(),
-                  fracPart(Air530.location.lng(), 4));
+                  (int)lattitude,
+                  fracPart(lattitude, 4),
+                  (int)longitude,
+                  fracPart(longitude, 4));
   str[index] = 0;
   display.drawString(0, 16, str);
 
   if (buddyLattitudeData != 0)
   {
-    index = sprintf(str, "Buddy: distance: %dm", 0);
+    // double TinyGPSPlus::courseTo(double lat1, double long1, double lat2, double long2)
+    double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
+    index = sprintf(str, "Buddy: distance: %dm", distance);
     str[index] = 0;
     display.drawString(0, 32, str);
 
     index = sprintf(str, "lat:%d.%d lon:%d.%d",
                     (int)buddyLattitudeData,
                     fracPart(buddyLattitudeData, 4),
-                    0,
-                    0);
+                    (int)buddyLongitudeData,
+                    fracPart(buddyLongitudeData, 4));
     display.drawString(0, 48, str);
   }
   if (radioState == TX)
@@ -134,48 +137,6 @@ void render()
     display.drawString(112, 0, str);
   }
   display.display();
-}
-
-uint8_t* writeInt32(int32_t value, uint8_t *data)
-{
-  for (uint8_t i = 0; i < sizeof(value); i++)
-  {
-    data[i] = value & 0x000000FF;
-    value = value >> 8;
-  }
-  return data + sizeof(value);
-}
-
-uint8_t* writeInt16(int16_t value, uint8_t *data)
-{
-  for (uint8_t i = 0; i < sizeof(value); i++)
-  {
-    data[i] = value & 0x00FF;
-    value = value >> 8;
-  }
-  return data + sizeof(value);
-}
-
-uint8_t* readInt32(uint8_t *data, int32_t* value)
-{
-  *value = 0;
-  for (uint8_t i = 0; i < sizeof(*value); i++)
-  {
-    *value = *value | data[i];
-    *value = *value << 8;
-  }
-  return data + sizeof(*value);
-}
-
-uint8_t* readInt16(uint8_t *data, int16_t* value)
-{
-  *value = 0;
-  for (uint8_t i = 0; i < sizeof(*value); i++)
-  {
-    *value = *value | data[i];
-    *value = *value << 8;
-  }
-  return data + sizeof(*value);
 }
 
 void loop()
@@ -197,12 +158,18 @@ void loop()
     if (radioState != TX)
     {
       radioState = TX;
-      txNumber++;
       uint8_t data[BUFFER_SIZE];
-      uint8_t* pos = data;
-      pos = writeInt16(Air530.location.rawLat().deg, pos);
-      pos = writeInt32(Air530.location.rawLat().billionths, pos);
-      Radio.Send(data, pos - data);
+      double lattitude = Air530.location.lat();
+      double longitude = Air530.location.lng();
+      for (size_t i = 0; i < sizeof lattitude; i++)
+      {
+        data[i] = ((byte *)&lattitude)[i];
+      }
+      for (size_t i = 0; i < sizeof longitude; i++)
+      {
+        data[i + sizeof lattitude] = ((byte *)&longitude)[i];
+      }
+      Radio.Send(data, sizeof lattitude + sizeof longitude);
     }
   }
   else
@@ -233,13 +200,14 @@ void OnTxTimeout(void)
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-  int16_t degrees;
-  int32_t billonths;
-  uint8_t* pos = payload;
-  pos = readInt16(pos, &degrees);
-  pos = readInt32(pos, &billonths);
-  buddyLattitudeData = degrees + billonths / 1000000000.0;
-  
+  for (size_t i = 0; i < sizeof buddyLattitudeData; i++)
+  {
+    ((byte *)&buddyLattitudeData)[i] = payload[i];
+  }
+  for (size_t i = 0; i < sizeof buddyLongitudeData; i++)
+  {
+    ((byte *)&buddyLongitudeData)[i] = payload[i + sizeof buddyLattitudeData];
+  }
   Radio.Sleep();
   radioState = WAIT;
 }
