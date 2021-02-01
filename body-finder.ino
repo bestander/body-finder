@@ -136,6 +136,48 @@ void render()
   display.display();
 }
 
+uint8_t* writeInt32(int32_t value, uint8_t *data)
+{
+  for (uint8_t i = 0; i < sizeof(value); i++)
+  {
+    data[i] = value & 0x000000FF;
+    value = value >> 8;
+  }
+  return data + sizeof(value);
+}
+
+uint8_t* writeInt16(int16_t value, uint8_t *data)
+{
+  for (uint8_t i = 0; i < sizeof(value); i++)
+  {
+    data[i] = value & 0x00FF;
+    value = value >> 8;
+  }
+  return data + sizeof(value);
+}
+
+uint8_t* readInt32(uint8_t *data, int32_t* value)
+{
+  *value = 0;
+  for (uint8_t i = 0; i < sizeof(*value); i++)
+  {
+    *value = *value | data[i];
+    *value = *value << 8;
+  }
+  return data + sizeof(*value);
+}
+
+uint8_t* readInt16(uint8_t *data, int16_t* value)
+{
+  *value = 0;
+  for (uint8_t i = 0; i < sizeof(*value); i++)
+  {
+    *value = *value | data[i];
+    *value = *value << 8;
+  }
+  return data + sizeof(*value);
+}
+
 void loop()
 {
   Radio.IrqProcess();
@@ -156,13 +198,11 @@ void loop()
     {
       radioState = TX;
       txNumber++;
-      // TODO serialize Air530.location.rawLat() and Air530.location.rawLon() into data[]
-      uint8_t data[4];
-      data[0] = 0;
-      data[1] = 1;
-      data[2] = 2;
-      data[3] = 3;
-      Radio.Send((uint8_t *)data, sizeof(data));
+      uint8_t data[BUFFER_SIZE];
+      uint8_t* pos = data;
+      pos = writeInt16(Air530.location.rawLat().deg, pos);
+      pos = writeInt32(Air530.location.rawLat().billionths, pos);
+      Radio.Send(data, pos - data);
     }
   }
   else
@@ -193,13 +233,13 @@ void OnTxTimeout(void)
 
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-  // TODO parse payload
-  //  buddyLattitudeData = rawLatData.deg + rawLatData.billionths / 1000000000.0;
-  //  buddyLongitudeData = rawLonData.deg + rawLonData.billionths / 1000000000.0;
-  char rxpacket[BUFFER_SIZE];
-  memcpy(rxpacket, payload, size);
-  rxpacket[size] = '\0';
+  int16_t degrees;
+  int32_t billonths;
+  uint8_t* pos = payload;
+  pos = readInt16(pos, &degrees);
+  pos = readInt32(pos, &billonths);
+  buddyLattitudeData = degrees + billonths / 1000000000.0;
+  
   Radio.Sleep();
-  Serial.printf("\r\nreceived packet \"%s\" with rssi %d , length %d\r\n", rxpacket, rssi, size);
   radioState = WAIT;
 }
