@@ -6,20 +6,21 @@
 
 #define RF_FREQUENCY 868000000 // Hz
 
-#define TX_OUTPUT_POWER 20 // dBm
+#define TX_OUTPUT_POWER 22 // dBm
 #define PARTICPANT 0       // 0 - 5
 
-#define LORA_BANDWIDTH 0        // [0: 125 kHz, \
+#define LORA_BANDWIDTH 0         // [0: 125 kHz, \
                                 //  1: 250 kHz, \
                                 //  2: 500 kHz, \
                                 //  3: Reserved]
-#define LORA_SPREADING_FACTOR 8 // [SF7..SF12]
-#define LORA_CODINGRATE 4       // [1: 4/5, \
+#define LORA_SPREADING_FACTOR 12 // [SF7..SF12]
+#define LORA_CODINGRATE 4        // [1: 4/5, \
                                 //  2: 4/6, \
                                 //  3: 4/7, \
                                 //  4: 4/8]
-#define LORA_PREAMBLE_LENGTH 8  // Same for Tx and Rx
-#define LORA_SYMBOL_TIMEOUT 0   // Symbols
+#define TX_TIMEOUT_VALUE 3000
+#define LORA_PREAMBLE_LENGTH 8 // Same for Tx and Rx
+#define LORA_SYMBOL_TIMEOUT 0  // Symbols
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
 
@@ -73,11 +74,11 @@ void setup()
   Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
                     LORA_SPREADING_FACTOR, LORA_CODINGRATE,
                     LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
-                    true, 0, 0, LORA_IQ_INVERSION_ON, 3000);
+                    true /*CRC*/, 0 /*frequency hopping*/, 0 /*hop period*/, LORA_IQ_INVERSION_ON, TX_TIMEOUT_VALUE);
   Radio.SetRxConfig(MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
                     LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
                     LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
-                    0, true, 0, 0, LORA_IQ_INVERSION_ON, true);
+                    0, true /*CRC*/, 0 /*frequency hopping*/, 0 /*hop period*/, LORA_IQ_INVERSION_ON, true /*continuous*/);
 
   Serial.begin(115200);
   Air530.begin();
