@@ -4,11 +4,9 @@
 #include <Wire.h>
 #include "cubecell_SSD1306Wire.h"
 
+#define MIN_DELAY_BETWEEN_TRANSMISSIONS 20
 #define RF_FREQUENCY 868000000 // Hz
-
 #define TX_OUTPUT_POWER 22 // dBm
-#define PARTICPANT 0       // 0 - 5
-
 #define LORA_BANDWIDTH 0         // [0: 125 kHz, \
                                 //  1: 250 kHz, \
                                 //  2: 500 kHz, \
@@ -39,6 +37,7 @@ void OnTxTimeout(void);
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
 
 double buddyLattitudeData, buddyLongitudeData;
+uint32_t nextTransmissionTime = 0;
 
 #define BUFFER_SIZE 30 // Define the payload size here
 
@@ -109,12 +108,14 @@ void render()
                   fracPart(longitude, 4));
   str[index] = 0;
   display.drawString(0, 16, str);
+  // buddyLattitudeData = 47.5305;
+  // buddyLongitudeData = -122.1427;
 
   if (buddyLattitudeData != 0)
   {
     // double TinyGPSPlus::courseTo(double lat1, double long1, double lat2, double long2)
     double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
-    index = sprintf(str, "Buddy: distance: %dm", distance);
+    index = sprintf(str, "Buddy: distance: %d", (int)distance);
     str[index] = 0;
     display.drawString(0, 32, str);
 
@@ -151,10 +152,8 @@ void loop()
       Air530.encode(Air530.read());
     }
   }
-  uint8_t minTxSeconds = PARTICPANT * 10;
-  uint8_t maxTxSeconds = minTxSeconds + 10;
-  uint8_t seconds = Air530.time.second();
-  if (seconds > minTxSeconds && seconds < maxTxSeconds)
+  uint32_t currentTime = Air530.time.value();
+  if (Air530.location.isValid() && currentTime > nextTransmissionTime)
   {
     if (radioState != TX)
     {
@@ -170,6 +169,7 @@ void loop()
       {
         data[i + sizeof lattitude] = ((byte *)&longitude)[i];
       }
+      nextTransmissionTime = currentTime + (random(20) + MIN_DELAY_BETWEEN_TRANSMISSIONS) * 1000;
       Radio.Send(data, sizeof lattitude + sizeof longitude);
     }
   }
