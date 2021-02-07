@@ -1,12 +1,11 @@
-//the GPS module used is Air530.
 #include "Arduino.h"
 #include "GPS_Air530.h"
 #include <Wire.h>
 #include "cubecell_SSD1306Wire.h"
 
 #define MIN_DELAY_BETWEEN_TRANSMISSIONS 20
-#define RF_FREQUENCY 868000000 // Hz
-#define TX_OUTPUT_POWER 22 // dBm
+#define RF_FREQUENCY 868000000   // Hz
+#define TX_OUTPUT_POWER 22       // dBm
 #define LORA_BANDWIDTH 0         // [0: 125 kHz, \
                                 //  1: 250 kHz, \
                                 //  2: 500 kHz, \
@@ -43,6 +42,58 @@ uint32_t nextTransmissionTime = 0;
 
 static RadioEvents_t RadioEvents;
 
+#define VBAT_ADC_CTL P3_3
+#define ADC1 P2_0
+#define ADC ADC1
+
+typedef enum eLoRaMacBatteryLevel
+{
+  /*!
+     * External power source
+     */
+  BAT_LEVEL_EXT_SRC = 0x00,
+  /*!
+     * Battery level empty
+     */
+  BAT_LEVEL_EMPTY = 0x01,
+  /*!
+     * Battery level full
+     */
+  BAT_LEVEL_FULL = 0xFE,
+  /*!
+     * Battery level - no measurement available
+     */
+  BAT_LEVEL_NO_MEASURE = 0xFF,
+} LoRaMacBatteryLevel_t;
+
+uint16_t getBatteryVoltage(void)
+{
+  pinMode(VBAT_ADC_CTL, OUTPUT);
+  digitalWrite(VBAT_ADC_CTL, LOW);
+  uint16_t volt = analogRead(ADC) * 2;
+
+  /*
+	 * Board, BoardPlus, Capsule, GPS and HalfAA variants
+	 * have external 10K VDD pullup resistor
+	 * connected to GPIO7 (USER_KEY / VBAT_ADC_CTL) pin
+	 */
+  pinMode(VBAT_ADC_CTL, INPUT);
+  return volt;
+}
+
+uint8_t getBatteryLevel()
+{
+  // 5.5 End-Device Status (DevStatusReq, DevStatusAns)
+  // 0      The end-device is connected to an external power source.
+  // 1..254 The battery level, 1 being at minimum and 254 being at maximum
+  // 255    The end-device was not able to measure the battery level.
+  const double maxBattery = 4.212;
+  const double minBattery = 3.7;
+  const double batVoltage = fmax(minBattery, fmin(maxBattery, getBatteryVoltage() / 1000.0));
+  const uint8_t batlevel = BAT_LEVEL_EMPTY + ((batVoltage - minBattery) / (maxBattery - minBattery)) * (BAT_LEVEL_FULL - BAT_LEVEL_EMPTY);
+  return batlevel;
+}
+
 SSD1306Wire display(0x3c, 500000, I2C_NUM_0, GEOMETRY_128_64, GPIO10); // addr , freq , i2c group , resolution , rst
 
 int fracPart(double val, int n)
@@ -61,7 +112,7 @@ void setup()
 
   display.setTextAlignment(TEXT_ALIGN_CENTER);
   display.setFont(ArialMT_Plain_16);
-  display.drawString(64, 32 - 16 / 2, "GPS starting...");
+  display.drawString(64, 32 - 16 / 2, "BODY FINDER");
   display.display();
 
   RadioEvents.TxDone = OnTxDone;
@@ -91,53 +142,61 @@ void render()
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
 
-  int index = sprintf(str, "Me: sats: %d", (int)Air530.satellites.value());
+  int index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
   str[index] = 0;
-  display.drawString(0, 0, str);
+  display.drawString(40, 0, str);
 
-  index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
+  double batteryPercent = (double)getBatteryLevel() / 254 * 100;
+  if (batteryPercent < 100)
+  {
+    index = sprintf(str, "%02d%%", (int)batteryPercent);
+  }
+  else
+  {
+    index = sprintf(str, "%03d%%", (int)batteryPercent);
+  }
   str[index] = 0;
-  display.drawString(65, 0, str);
+  display.drawString(98, 0, str);
 
-  double lattitude = Air530.location.lat();
-  double longitude = Air530.location.lng();
-  index = sprintf(str, "lat:%d.%d lon:%d.%d",
-                  (int)lattitude,
-                  fracPart(lattitude, 4),
-                  (int)longitude,
-                  fracPart(longitude, 4));
+  index = sprintf(str, "sats: %02d", (int)Air530.satellites.value());
   str[index] = 0;
   display.drawString(0, 16, str);
-  // buddyLattitudeData = 47.5305;
-  // buddyLongitudeData = -122.1427;
 
-  if (buddyLattitudeData != 0)
-  {
-    // double TinyGPSPlus::courseTo(double lat1, double long1, double lat2, double long2)
-    double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
-    index = sprintf(str, "Buddy: distance: %d", (int)distance);
-    str[index] = 0;
-    display.drawString(0, 32, str);
-
-    index = sprintf(str, "lat:%d.%d lon:%d.%d",
-                    (int)buddyLattitudeData,
-                    fracPart(buddyLattitudeData, 4),
-                    (int)buddyLongitudeData,
-                    fracPart(buddyLongitudeData, 4));
-    display.drawString(0, 48, str);
-  }
   if (radioState == TX)
   {
     index = sprintf(str, "TX");
     str[index] = 0;
-    display.drawString(112, 0, str);
+    display.drawString(98, 16, str);
   }
+
   if (radioState == RX)
   {
     index = sprintf(str, "RX");
     str[index] = 0;
-    display.drawString(112, 0, str);
+    display.drawString(98, 16, str);
   }
+
+  buddyLattitudeData = 47.5305;
+  buddyLongitudeData = -122.1427;
+
+  if (buddyLattitudeData != 0)
+  {
+    index = sprintf(str, "V");
+    display.setTextAlignment(TEXT_ALIGN_CENTER);
+    display.setFont(ArialMT_Plain_16);
+    display.drawString(64, 32 - 16 / 2, str);
+
+    double lattitude = Air530.location.lat();
+    double longitude = Air530.location.lng();
+    // double TinyGPSPlus::courseTo(double lat1, double long1, double lat2, double long2)
+    double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
+
+    display.setFont(ArialMT_Plain_10);
+    index = sprintf(str, "%d m", (int)distance);
+    str[index] = 0;
+    display.drawString(64, 48 - 10 / 2, str);
+  }
+
   display.display();
 }
 
