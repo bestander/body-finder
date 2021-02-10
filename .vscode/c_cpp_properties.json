@@ -3,6 +3,7 @@
         {
             "name": "Mac",
             "includePath": [
+                "/Users/bestander/work/libraries/Dictionary/src",
                 "/Users/bestander/Library/Arduino15/packages/esp8266/tools/**",
                 "/Users/bestander/work/libraries/**",
                 "/Users/bestander/Library/Arduino15/packages/esp8266/hardware/esp8266/2.7.4/**",

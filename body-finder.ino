@@ -23,6 +23,16 @@
 
 #define RX_TIMEOUT_VALUE 1000
 
+typedef struct
+{
+  uint32_t id;
+  char *name;
+} usersDictionary;
+
+const usersDictionary users[]{
+    {0x93a2, "V"},
+    {0x93a3, "K"}};
+
 typedef enum
 {
   WAIT,
@@ -43,8 +53,7 @@ uint32_t nextTransmissionTime = 0;
 static RadioEvents_t RadioEvents;
 
 #define VBAT_ADC_CTL P3_3
-#define ADC1 P2_0
-#define ADC ADC1
+#define ADC P2_0
 
 typedef enum eLoRaMacBatteryLevel
 {
@@ -71,7 +80,6 @@ uint16_t getBatteryVoltage(void)
   pinMode(VBAT_ADC_CTL, OUTPUT);
   digitalWrite(VBAT_ADC_CTL, LOW);
   uint16_t volt = analogRead(ADC) * 2;
-
   /*
 	 * Board, BoardPlus, Capsule, GPS and HalfAA variants
 	 * have external 10K VDD pullup resistor
@@ -181,7 +189,26 @@ void render()
 
   if (buddyLattitudeData != 0)
   {
-    index = sprintf(str, "V");
+    uint32_t chipID = (uint32_t)(getID() >> 32);
+    char *name;
+    bool found = false;
+    for (uint8_t i = 0; i < sizeof(users) / sizeof(usersDictionary); ++i)
+    {
+      if (users[i].id == chipID)
+      {
+        name = users[i].name;
+        found = true;
+        break;
+      }
+    }
+    if (!found)
+    {
+      char id[4];
+      sprintf(id, "%04X", chipID);
+      name = id;
+    }
+
+    index = sprintf(str, "%s", name);
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.setFont(ArialMT_Plain_16);
     display.drawString(64, 32 - 16 / 2, str);
