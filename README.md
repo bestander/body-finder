@@ -56,8 +56,6 @@ Follow [heltec guide](https://heltec-automation-docs.readthedocs.io/en/latest/cu
 - Install QMC5883LCompass library: Tools -> Manage Libraries -> Search and install QMC5883LCompass
 ![Install compass library](resources/QMC5883LCompass.png?raw=true)
 
-
-
 ### Compiling code
 
 - Clone this repo `git clone git@github.com:bestander/body-finder.git`

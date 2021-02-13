@@ -3,13 +3,16 @@
         {
             "name": "Mac",
             "includePath": [
-                "/Users/bestander/Library/Arduino15/packages/esp8266/tools/**",
-                "/Users/bestander/work/libraries/**",
-                "/Users/bestander/Library/Arduino15/packages/esp8266/hardware/esp8266/2.7.4/**",
+                "~/Library/Arduino15/packages/esp8266/tools/**",
+                "~/Library/Arduino15/packages/esp8266/hardware/esp8266/2.7.4/**",
                 "~/Library/Arduino15/packages/CubeCell/tools/**",
                 "~/work/libraries/**",
                 "/Applications/Arduino.app/Contents/Java/libraries/**",
                 "~/Library/Arduino15/packages/CubeCell/hardware/CubeCell/1.2.0/**",
+                "~/Library/Arduino15/packages/CubeCell/hardware/CubeCell/1.2.0/libraries/OLED/src",
+                "/Users/bestander/Library/Arduino15/packages/CubeCell/hardware/CubeCell/1.2.0/**",
+                "/Users/bestander/work/libraries/**",
+                "/Users/bestander/Library/Arduino15/packages/CubeCell/tools/**"
             ],
             "forcedInclude": [],
             "defines": [
