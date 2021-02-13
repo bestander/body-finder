@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "locale": "cpp",
+        "string": "cpp",
+        "__tuple": "cpp",
+        "array": "cpp",
+        "ios": "cpp",
+        "random": "cpp",
+        "*.tcc": "cpp"
+    }
+}

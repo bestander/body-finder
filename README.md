@@ -18,16 +18,25 @@ And it contains:
 - AIR530 GPS module
 - SX1262 radio transciever
 - 0.96-inch 128*64 OLED display
-- Power management  system
+- Power management system (micro JST battery plug, charge controller, solar panel interface)
 - IO/PWM pins
+
+![pinout](resources/pinout-htcab-02s.png?raw=true)
 
 ### Compass
 
-2BD
+Compass is [GY-271 QMC5883L](https://www.amazon.com/gp/product/B085W6YCM6/ref=ppx_yo_dt_b_asin_title_o00_s00?ie=UTF8&psc=1).
+Attached SLC0/SDA0 and VDD/GND pins.
+
+![compass](resources/compass.png?raw=true)
+
 
 ### Battery
 
-2BD
+[3.7V 1100mAh](https://www.amazon.com/gp/product/B0867KDMY7/ref=ppx_yo_dt_b_asin_title_o06_s00?ie=UTF8&psc=1) Lithium Rechargable Battery 1S 3C.
+Attached to battery port on the board.
+
+![battery](resources/battery.png?raw=true)
 
 ## Software setup
 
@@ -44,6 +53,10 @@ Follow [heltec guide](https://heltec-automation-docs.readthedocs.io/en/latest/cu
 ![Install CubeCell library](resources/install.png?raw=true)
 - Select board in Tools -> Board -> CubeCell -> CubeCell GPS (HTCC-AB02S)
 ![Select CubeCell GPS board](resources/htcc-ab02s.png?raw=true)
+- Install QMC5883LCompass library: Tools -> Manage Libraries -> Search and install QMC5883LCompass
+![Install compass library](resources/QMC5883LCompass.png?raw=true)
+
+
 
 ### Compiling code
 
