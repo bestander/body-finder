@@ -2,6 +2,7 @@
 #include "GPS_Air530.h"
 #include <Wire.h>
 #include "cubecell_SSD1306Wire.h"
+#include <QMC5883LCompass.h>
 
 #define MIN_DELAY_BETWEEN_TRANSMISSIONS 20
 #define RF_FREQUENCY 868000000   // Hz
@@ -46,6 +47,7 @@ void OnTxTimeout(void);
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
 
 double buddyLattitudeData, buddyLongitudeData;
+byte myBearing;
 uint32_t nextTransmissionTime = 0;
 
 #define BUFFER_SIZE 30 // Define the payload size here
@@ -103,6 +105,7 @@ uint8_t getBatteryLevel()
 }
 
 SSD1306Wire display(0x3c, 500000, I2C_NUM_0, GEOMETRY_128_64, GPIO10); // addr , freq , i2c group , resolution , rst
+QMC5883LCompass compass;
 
 int fracPart(double val, int n)
 {
@@ -140,7 +143,21 @@ void setup()
 
   Serial.begin(115200);
   Air530.begin();
+  compass.init();
   radioState = WAIT;
+}
+
+void readCompass()
+{
+  // stop display
+  Wire.endTransmission();
+  Wire.beginTransmission(0x0D);
+  compass.read();
+  // Output here will be a value from 0 - 15 based on the direction of the bearing / azimuth.
+  myBearing = compass.getBearing(compass.getAzimuth());
+  Wire.endTransmission();
+  // start display
+  Wire.beginTransmission(0x0C);
 }
 
 void render()
@@ -219,7 +236,7 @@ void render()
     double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
 
     display.setFont(ArialMT_Plain_10);
-    index = sprintf(str, "%d m", (int)distance);
+    index = sprintf(str, "%d m bearing: %d", (int)distance, (int)myBearing);
     str[index] = 0;
     display.drawString(64, 48 - 10 / 2, str);
   }
@@ -230,6 +247,7 @@ void render()
 void loop()
 {
   Radio.IrqProcess();
+  readCompass();
   uint32_t starttime = millis();
   while ((millis() - starttime) < 1000)
   {
