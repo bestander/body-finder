@@ -75,7 +75,7 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
   radioState = WAIT;
 }
 
-void transmitRecivePosition()
+void transmitReceivePosition()
 {
   uint32_t currentTime = Air530.time.value();
   if (Air530.location.isValid() && currentTime > nextTransmissionTime)
@@ -107,10 +107,6 @@ void transmitRecivePosition()
     }
   }
 }
-
-// void OnTxDone(void);
-// void OnTxTimeout(void);
-// void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
 
 /***
  * COMPASS SECTION START 
@@ -190,6 +186,12 @@ uint8_t getBatteryLevel()
  */
 SSD1306Wire display(0x3c, 500000, I2C_NUM_0, GEOMETRY_128_64, GPIO10); // addr , freq , i2c group , resolution , rst
 
+void drawString(int16_t x, int16_t y, String str)
+{
+  display.drawString(x, y, str);
+  Serial.println(str);
+}
+
 void render()
 {
   char str[30];
@@ -199,7 +201,7 @@ void render()
 
   int index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
   str[index] = 0;
-  display.drawString(40, 0, str);
+  drawString(40, 0, str);
 
   double batteryPercent = (double)getBatteryLevel() / 254 * 100;
   if (batteryPercent < 100)
@@ -211,24 +213,24 @@ void render()
     index = sprintf(str, "%03d%%", (int)batteryPercent);
   }
   str[index] = 0;
-  display.drawString(98, 0, str);
+  drawString(98, 0, str);
 
   index = sprintf(str, "sats: %02d", (int)Air530.satellites.value());
   str[index] = 0;
-  display.drawString(0, 16, str);
+  drawString(0, 16, str);
 
   if (radioState == TX)
   {
     index = sprintf(str, "TX");
     str[index] = 0;
-    display.drawString(98, 16, str);
+    drawString(98, 16, str);
   }
 
   if (radioState == RX)
   {
     index = sprintf(str, "RX");
     str[index] = 0;
-    display.drawString(98, 16, str);
+    drawString(98, 16, str);
   }
 
   if (buddyLattitudeData != 0)
@@ -255,7 +257,7 @@ void render()
     index = sprintf(str, "%s", name);
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.setFont(ArialMT_Plain_16);
-    display.drawString(64, 32 - 16 / 2, str);
+    drawString(64, 32 - 16 / 2, str);
 
     double lattitude = Air530.location.lat();
     double longitude = Air530.location.lng();
@@ -265,7 +267,7 @@ void render()
     display.setFont(ArialMT_Plain_10);
     index = sprintf(str, "%d m bearing: %d", (int)distance, (int)myBearing);
     str[index] = 0;
-    display.drawString(64, 48 - 10 / 2, str);
+    drawString(64, 48 - 10 / 2, str);
   }
 
   display.display();
@@ -276,13 +278,14 @@ void render()
  */
 void setup()
 {
+  Serial.begin(115200);
   delay(10);
   boardInitMcu();
   display.init();
   display.clear();
   display.setTextAlignment(TEXT_ALIGN_CENTER);
   display.setFont(ArialMT_Plain_16);
-  display.drawString(64, 32 - 16 / 2, "BODY FINDER");
+  drawString(64, 32 - 16 / 2, "BODY FINDER");
   display.display();
 
   RadioEvents.TxDone = OnTxDone;
@@ -315,6 +318,6 @@ void loop()
       Air530.encode(Air530.read());
     }
   }
-  transmitRecivePosition();
+  transmitReceivePosition();
   render();
 }
