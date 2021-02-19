@@ -4,6 +4,19 @@
 #include "cubecell_SSD1306Wire.h"
 #include <QMC5883LCompass.h>
 
+/***
+ * Radio section START 
+ */
+typedef struct
+{
+  uint32_t id;
+  char *name;
+} UsersDictionary_t;
+
+const UsersDictionary_t KNOWN_USERS[]{
+    {0x93a2, "V"},
+    {0x93a3, "K"}};
+
 #define MIN_DELAY_BETWEEN_TRANSMISSIONS 20
 #define RF_FREQUENCY 868000000   // Hz
 #define TX_OUTPUT_POWER 22       // dBm
@@ -21,18 +34,11 @@
 #define LORA_SYMBOL_TIMEOUT 0  // Symbols
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
-
 #define RX_TIMEOUT_VALUE 1000
+#define TRANSMISSION_SIZE 30
 
-typedef struct
-{
-  uint32_t id;
-  char *name;
-} usersDictionary;
-
-const usersDictionary users[]{
-    {0x93a2, "V"},
-    {0x93a3, "K"}};
+double buddyLattitudeData, buddyLongitudeData;
+uint32_t nextTransmissionTime = 0;
 
 typedef enum
 {
@@ -42,38 +48,109 @@ typedef enum
 } RadioStates_t;
 
 RadioStates_t radioState;
-void OnTxDone(void);
-void OnTxTimeout(void);
-void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr);
-
-double buddyLattitudeData, buddyLongitudeData;
-byte myBearing;
-uint32_t nextTransmissionTime = 0;
-
-#define BUFFER_SIZE 30 // Define the payload size here
-
 static RadioEvents_t RadioEvents;
 
+void OnTxDone(void)
+{
+  Radio.Rx(0);
+  radioState = RX;
+}
+
+void OnTxTimeout(void)
+{
+  radioState = WAIT;
+}
+
+void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
+{
+  for (size_t i = 0; i < sizeof buddyLattitudeData; i++)
+  {
+    ((byte *)&buddyLattitudeData)[i] = payload[i];
+  }
+  for (size_t i = 0; i < sizeof buddyLongitudeData; i++)
+  {
+    ((byte *)&buddyLongitudeData)[i] = payload[i + sizeof buddyLattitudeData];
+  }
+  Radio.Sleep();
+  radioState = WAIT;
+}
+
+void transmitReceivePosition()
+{
+  uint32_t currentTime = Air530.time.value();
+  if (Air530.location.isValid() && currentTime > nextTransmissionTime)
+  {
+    if (radioState != TX)
+    {
+      radioState = TX;
+      uint8_t data[TRANSMISSION_SIZE];
+      double lattitude = Air530.location.lat();
+      double longitude = Air530.location.lng();
+      for (size_t i = 0; i < sizeof lattitude; i++)
+      {
+        data[i] = ((byte *)&lattitude)[i];
+      }
+      for (size_t i = 0; i < sizeof longitude; i++)
+      {
+        data[i + sizeof lattitude] = ((byte *)&longitude)[i];
+      }
+      nextTransmissionTime = currentTime + (random(20) + MIN_DELAY_BETWEEN_TRANSMISSIONS) * 1000;
+      Radio.Send(data, sizeof lattitude + sizeof longitude);
+    }
+  }
+  else
+  {
+    if (radioState != RX)
+    {
+      radioState = RX;
+      Radio.Rx(0);
+    }
+  }
+}
+
+/***
+ * COMPASS SECTION START 
+ */
+#define DISPLAY_I2C_ADDRESS 0x0C
+#define COMPASS_I2C_ADDRESS 0x0D
+byte myBearing;
+QMC5883LCompass compass;
+
+void readCompass()
+{
+  // stop display
+  Wire.endTransmission();
+  Wire.beginTransmission(COMPASS_I2C_ADDRESS);
+  compass.read();
+  // Output here will be a value from 0 - 15 based on the direction of the bearing / azimuth.
+  myBearing = compass.getBearing(compass.getAzimuth());
+  Wire.endTransmission();
+  // start display
+  Wire.beginTransmission(DISPLAY_I2C_ADDRESS);
+}
+
+/***
+ * BATTERY SECTION START 
+ */
 #define VBAT_ADC_CTL P3_3
 #define ADC P2_0
-
 typedef enum eLoRaMacBatteryLevel
 {
-  /*!
-     * External power source
-     */
+  /***
+   * External power source
+   */
   BAT_LEVEL_EXT_SRC = 0x00,
-  /*!
-     * Battery level empty
-     */
+  /**
+   * Battery level empty
+   */
   BAT_LEVEL_EMPTY = 0x01,
-  /*!
-     * Battery level full
-     */
+  /***
+    * Battery level full
+    */
   BAT_LEVEL_FULL = 0xFE,
-  /*!
-     * Battery level - no measurement available
-     */
+  /***
+    * Battery level - no measurement available
+    */
   BAT_LEVEL_NO_MEASURE = 0xFF,
 } LoRaMacBatteryLevel_t;
 
@@ -104,60 +181,15 @@ uint8_t getBatteryLevel()
   return batlevel;
 }
 
+/***
+ * DISPLAY SECTION START 
+ */
 SSD1306Wire display(0x3c, 500000, I2C_NUM_0, GEOMETRY_128_64, GPIO10); // addr , freq , i2c group , resolution , rst
-QMC5883LCompass compass;
 
-int fracPart(double val, int n)
+void drawString(int16_t x, int16_t y, String str)
 {
-  return abs((int)((val - (int)(val)) * pow(10, n)));
-}
-
-void setup()
-{
-  delay(10);
-
-  boardInitMcu();
-  display.init();
-  display.clear();
-  display.display();
-
-  display.setTextAlignment(TEXT_ALIGN_CENTER);
-  display.setFont(ArialMT_Plain_16);
-  display.drawString(64, 32 - 16 / 2, "BODY FINDER");
-  display.display();
-
-  RadioEvents.TxDone = OnTxDone;
-  RadioEvents.TxTimeout = OnTxTimeout;
-  RadioEvents.RxDone = OnRxDone;
-
-  Radio.Init(&RadioEvents);
-  Radio.SetChannel(RF_FREQUENCY);
-  Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
-                    LORA_SPREADING_FACTOR, LORA_CODINGRATE,
-                    LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
-                    true /*CRC*/, 0 /*frequency hopping*/, 0 /*hop period*/, LORA_IQ_INVERSION_ON, TX_TIMEOUT_VALUE);
-  Radio.SetRxConfig(MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
-                    LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
-                    LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
-                    0, true /*CRC*/, 0 /*frequency hopping*/, 0 /*hop period*/, LORA_IQ_INVERSION_ON, true /*continuous*/);
-
-  Serial.begin(115200);
-  Air530.begin();
-  compass.init();
-  radioState = WAIT;
-}
-
-void readCompass()
-{
-  // stop display
-  Wire.endTransmission();
-  Wire.beginTransmission(0x0D);
-  compass.read();
-  // Output here will be a value from 0 - 15 based on the direction of the bearing / azimuth.
-  myBearing = compass.getBearing(compass.getAzimuth());
-  Wire.endTransmission();
-  // start display
-  Wire.beginTransmission(0x0C);
+  display.drawString(x, y, str);
+  Serial.println(str);
 }
 
 void render()
@@ -169,7 +201,7 @@ void render()
 
   int index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
   str[index] = 0;
-  display.drawString(40, 0, str);
+  drawString(40, 0, str);
 
   double batteryPercent = (double)getBatteryLevel() / 254 * 100;
   if (batteryPercent < 100)
@@ -181,39 +213,36 @@ void render()
     index = sprintf(str, "%03d%%", (int)batteryPercent);
   }
   str[index] = 0;
-  display.drawString(98, 0, str);
+  drawString(98, 0, str);
 
   index = sprintf(str, "sats: %02d", (int)Air530.satellites.value());
   str[index] = 0;
-  display.drawString(0, 16, str);
+  drawString(0, 16, str);
 
   if (radioState == TX)
   {
     index = sprintf(str, "TX");
     str[index] = 0;
-    display.drawString(98, 16, str);
+    drawString(98, 16, str);
   }
 
   if (radioState == RX)
   {
     index = sprintf(str, "RX");
     str[index] = 0;
-    display.drawString(98, 16, str);
+    drawString(98, 16, str);
   }
-
-  buddyLattitudeData = 47.5305;
-  buddyLongitudeData = -122.1427;
 
   if (buddyLattitudeData != 0)
   {
     uint32_t chipID = (uint32_t)(getID() >> 32);
     char *name;
     bool found = false;
-    for (uint8_t i = 0; i < sizeof(users) / sizeof(usersDictionary); ++i)
+    for (uint8_t i = 0; i < sizeof(KNOWN_USERS) / sizeof(UsersDictionary_t); ++i)
     {
-      if (users[i].id == chipID)
+      if (KNOWN_USERS[i].id == chipID)
       {
-        name = users[i].name;
+        name = KNOWN_USERS[i].name;
         found = true;
         break;
       }
@@ -228,7 +257,7 @@ void render()
     index = sprintf(str, "%s", name);
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.setFont(ArialMT_Plain_16);
-    display.drawString(64, 32 - 16 / 2, str);
+    drawString(64, 32 - 16 / 2, str);
 
     double lattitude = Air530.location.lat();
     double longitude = Air530.location.lng();
@@ -238,10 +267,43 @@ void render()
     display.setFont(ArialMT_Plain_10);
     index = sprintf(str, "%d m bearing: %d", (int)distance, (int)myBearing);
     str[index] = 0;
-    display.drawString(64, 48 - 10 / 2, str);
+    drawString(64, 48 - 10 / 2, str);
   }
 
   display.display();
+}
+
+/***
+ * SETUP AND LOOP
+ */
+void setup()
+{
+  Serial.begin(115200);
+  delay(10);
+  boardInitMcu();
+  display.init();
+  display.clear();
+  display.setTextAlignment(TEXT_ALIGN_CENTER);
+  display.setFont(ArialMT_Plain_16);
+  drawString(64, 32 - 16 / 2, "BODY FINDER");
+  display.display();
+
+  RadioEvents.TxDone = OnTxDone;
+  RadioEvents.TxTimeout = OnTxTimeout;
+  RadioEvents.RxDone = OnRxDone;
+  Radio.Init(&RadioEvents);
+  Radio.SetChannel(RF_FREQUENCY);
+  Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,
+                    LORA_SPREADING_FACTOR, LORA_CODINGRATE,
+                    LORA_PREAMBLE_LENGTH, LORA_FIX_LENGTH_PAYLOAD_ON,
+                    true /*CRC*/, 0 /*frequency hopping*/, 0 /*hop period*/, LORA_IQ_INVERSION_ON, TX_TIMEOUT_VALUE);
+  Radio.SetRxConfig(MODEM_LORA, LORA_BANDWIDTH, LORA_SPREADING_FACTOR,
+                    LORA_CODINGRATE, 0, LORA_PREAMBLE_LENGTH,
+                    LORA_SYMBOL_TIMEOUT, LORA_FIX_LENGTH_PAYLOAD_ON,
+                    0, true /*CRC*/, 0 /*frequency hopping*/, 0 /*hop period*/, LORA_IQ_INVERSION_ON, true /*continuous*/);
+  radioState = WAIT;
+  Air530.begin();
+  compass.init();
 }
 
 void loop()
@@ -256,63 +318,6 @@ void loop()
       Air530.encode(Air530.read());
     }
   }
-  uint32_t currentTime = Air530.time.value();
-  if (Air530.location.isValid() && currentTime > nextTransmissionTime)
-  {
-    if (radioState != TX)
-    {
-      radioState = TX;
-      uint8_t data[BUFFER_SIZE];
-      double lattitude = Air530.location.lat();
-      double longitude = Air530.location.lng();
-      for (size_t i = 0; i < sizeof lattitude; i++)
-      {
-        data[i] = ((byte *)&lattitude)[i];
-      }
-      for (size_t i = 0; i < sizeof longitude; i++)
-      {
-        data[i + sizeof lattitude] = ((byte *)&longitude)[i];
-      }
-      nextTransmissionTime = currentTime + (random(20) + MIN_DELAY_BETWEEN_TRANSMISSIONS) * 1000;
-      Radio.Send(data, sizeof lattitude + sizeof longitude);
-    }
-  }
-  else
-  {
-    if (radioState != RX)
-    {
-      radioState = RX;
-      Serial.println("into RX mode");
-      Radio.Rx(0);
-    }
-  }
-
+  transmitReceivePosition();
   render();
-}
-
-void OnTxDone(void)
-{
-  Serial.print("TX done!");
-  Radio.Rx(0);
-  radioState = RX;
-}
-
-void OnTxTimeout(void)
-{
-  Serial.print("TX Timeout......");
-  radioState = WAIT;
-}
-
-void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
-{
-  for (size_t i = 0; i < sizeof buddyLattitudeData; i++)
-  {
-    ((byte *)&buddyLattitudeData)[i] = payload[i];
-  }
-  for (size_t i = 0; i < sizeof buddyLongitudeData; i++)
-  {
-    ((byte *)&buddyLongitudeData)[i] = payload[i + sizeof buddyLattitudeData];
-  }
-  Radio.Sleep();
-  radioState = WAIT;
 }
