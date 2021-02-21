@@ -18,7 +18,7 @@ const UsersDictionary_t KNOWN_USERS[]{
     {0x93a3, "K"}};
 
 #define MIN_DELAY_BETWEEN_TRANSMISSIONS 20
-#define RF_FREQUENCY 868000000   // Hz
+#define RF_FREQUENCY 928000000   // Hz
 #define TX_OUTPUT_POWER 22       // dBm
 #define LORA_BANDWIDTH 0         // [0: 125 kHz, \
                                 //  1: 250 kHz, \
@@ -192,6 +192,27 @@ void drawString(int16_t x, int16_t y, String str)
   Serial.println(str);
 }
 
+int fracPart(double val, int n)
+{
+  return abs((int)((val - (int)(val)) * pow(10, n)));
+  return abs((int)((val - (int)(val)) * pow(10, n)));
+}
+
+struct Button {
+  const uint8_t PIN;
+  unsigned long lastFire = 0;
+  uint32_t numberKeyPresses;
+};
+
+Button button = {GPIO7, 0, false};
+
+void onButtonPress() {
+  if ((millis() - button.lastFire) > 200) {
+    button.lastFire = millis();
+    button.numberKeyPresses += 1;
+  }
+}
+
 void render()
 {
   char str[30];
@@ -199,75 +220,71 @@ void render()
   display.setFont(ArialMT_Plain_10);
   display.setTextAlignment(TEXT_ALIGN_LEFT);
 
-  int index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
+  int index = sprintf(str, "sats: %02d", (int)Air530.satellites.value());
   str[index] = 0;
-  drawString(40, 0, str);
+  drawString(0, 0, str);
+
+  index = sprintf(str, radioState == TX ? "TX" : "RX");
+  str[index] = 0;
+  drawString(60, 0, str);
 
   double batteryPercent = (double)getBatteryLevel() / 254 * 100;
-  if (batteryPercent < 100)
-  {
-    index = sprintf(str, "%02d%%", (int)batteryPercent);
-  }
-  else
-  {
-    index = sprintf(str, "%03d%%", (int)batteryPercent);
-  }
+  index = sprintf(str, "%d%%", (int)batteryPercent);
   str[index] = 0;
   drawString(98, 0, str);
 
-  index = sprintf(str, "sats: %02d", (int)Air530.satellites.value());
-  str[index] = 0;
-  drawString(0, 16, str);
-
-  if (radioState == TX)
+  if (button.numberKeyPresses % 2 == 0)
   {
-    index = sprintf(str, "TX");
+    index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
     str[index] = 0;
-    drawString(98, 16, str);
-  }
-
-  if (radioState == RX)
-  {
-    index = sprintf(str, "RX");
-    str[index] = 0;
-    drawString(98, 16, str);
-  }
-
-  if (buddyLattitudeData != 0)
-  {
-    uint32_t chipID = (uint32_t)(getID() >> 32);
-    char *name;
-    bool found = false;
-    for (uint8_t i = 0; i < sizeof(KNOWN_USERS) / sizeof(UsersDictionary_t); ++i)
-    {
-      if (KNOWN_USERS[i].id == chipID)
-      {
-        name = KNOWN_USERS[i].name;
-        found = true;
-        break;
-      }
-    }
-    if (!found)
-    {
-      char id[4];
-      sprintf(id, "%04X", chipID);
-      name = id;
-    }
-
-    index = sprintf(str, "%s", name);
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
-    display.setFont(ArialMT_Plain_16);
-    drawString(64, 32 - 16 / 2, str);
-
+    drawString(30, 16, str);
     double lattitude = Air530.location.lat();
     double longitude = Air530.location.lng();
-    // double TinyGPSPlus::courseTo(double lat1, double long1, double lat2, double long2)
-    double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
+    index = sprintf(str, "lat:%d.%d lon:%d.%d",
+                    (int)lattitude,
+                    fracPart(lattitude, 4),
+                    (int)longitude,
+                    fracPart(longitude, 4));
+    drawString(0, 32, str);
+  }
+  else if (button.numberKeyPresses % 2 == 1)
+  {
+    if (buddyLattitudeData != 0)
+    {
+      uint32_t chipID = (uint32_t)(getID() >> 32);
+      char *name;
+      bool found = false;
+      for (uint8_t i = 0; i < sizeof(KNOWN_USERS) / sizeof(UsersDictionary_t); ++i)
+      {
+        if (KNOWN_USERS[i].id == chipID)
+        {
+          name = KNOWN_USERS[i].name;
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+      {
+        char id[4];
+        sprintf(id, "%04X", chipID);
+        name = id;
+      }
 
-    display.setFont(ArialMT_Plain_10);
-    index = sprintf(str, "%d m bearing: %d", (int)distance, (int)myBearing);
-    str[index] = 0;
-    drawString(64, 48 - 10 / 2, str);
+      index = sprintf(str, "%s", name);
+      display.setTextAlignment(TEXT_ALIGN_CENTER);
+      display.setFont(ArialMT_Plain_16);
+      drawString(64, 32 - 16 / 2, str);
+
+      double lattitude = Air530.location.lat();
+      double longitude = Air530.location.lng();
+      // double TinyGPSPlus::courseTo(double lat1, double long1, double lat2, double long2)
+      double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
+
+      display.setFont(ArialMT_Plain_10);
+      index = sprintf(str, "%d m bearing: %d", (int)distance, (int)myBearing);
+      str[index] = 0;
+      drawString(64, 48 - 10 / 2, str);
+    }
   }
 
   display.display();
@@ -304,6 +321,8 @@ void setup()
   radioState = WAIT;
   Air530.begin();
   compass.init();
+  pinMode(button.PIN, INPUT_PULLUP);
+  attachInterrupt(button.PIN, onButtonPress, FALLING);
 }
 
 void loop()
