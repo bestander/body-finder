@@ -9,22 +9,22 @@
  */
 typedef struct
 {
-  uint32_t id;
+  uint64_t id;
   char *name;
 } UsersDictionary_t;
 
 const UsersDictionary_t KNOWN_USERS[]{
-    {0x93a2, "V"},
-    {0x93a3, "K"}};
+    {0xA6A70E30, "USER1"},
+    {0xA6A70F27, "USER2"}};
 
-#define MIN_DELAY_BETWEEN_TRANSMISSIONS 20
-#define RF_FREQUENCY 928000000   // Hz
+#define MIN_DELAY_BETWEEN_TRANSMISSIONS_SEC 10
+#define RF_FREQUENCY 915000000   // Hz
 #define TX_OUTPUT_POWER 22       // dBm
 #define LORA_BANDWIDTH 0         // [0: 125 kHz, \
                                 //  1: 250 kHz, \
                                 //  2: 500 kHz, \
                                 //  3: Reserved]
-#define LORA_SPREADING_FACTOR 12 // [SF7..SF12]
+#define LORA_SPREADING_FACTOR 10 // [SF7..SF12]
 #define LORA_CODINGRATE 4        // [1: 4/5, \
                                 //  2: 4/6, \
                                 //  3: 4/7, \
@@ -35,10 +35,9 @@ const UsersDictionary_t KNOWN_USERS[]{
 #define LORA_FIX_LENGTH_PAYLOAD_ON false
 #define LORA_IQ_INVERSION_ON false
 #define RX_TIMEOUT_VALUE 1000
-#define TRANSMISSION_SIZE 30
 
 double buddyLattitudeData, buddyLongitudeData;
-uint32_t nextTransmissionTime = 0;
+uint64_t buddyId;
 
 typedef enum
 {
@@ -46,65 +45,80 @@ typedef enum
   RX,
   TX
 } RadioStates_t;
-
 RadioStates_t radioState;
-static RadioEvents_t RadioEvents;
+uint32_t nextTransmissionTime = 0;
+uint32_t transmissionEndTime = 0;
+
+void OnRxTimeout(void)
+{
+  Serial.println("OnRxTimeout");
+}
+
+void OnRxError(void)
+{
+  Serial.println("OnRxError");
+}
 
 void OnTxDone(void)
 {
-  Radio.Rx(0);
-  radioState = RX;
+  Serial.println("OnTxDone");
+  transmissionEndTime = millis();
+  radioState = WAIT;
 }
 
 void OnTxTimeout(void)
 {
+  Serial.println("OnTxTimeout");
   radioState = WAIT;
 }
 
+typedef struct
+{
+  double lattitude;
+  double longitude;
+  uint64_t id;
+} PositionMessage_t;
+
+typedef union
+{
+  PositionMessage_t structure;
+  uint8_t byteArray[sizeof(PositionMessage_t)];
+} TransmitPositionMessage_t;
+
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-  for (size_t i = 0; i < sizeof buddyLattitudeData; i++)
-  {
-    ((byte *)&buddyLattitudeData)[i] = payload[i];
-  }
-  for (size_t i = 0; i < sizeof buddyLongitudeData; i++)
-  {
-    ((byte *)&buddyLongitudeData)[i] = payload[i + sizeof buddyLattitudeData];
-  }
+  Serial.printf("OnRxDone length %d\r\n", size);
+  TransmitPositionMessage_t message;
+  memcpy(message.byteArray, payload, sizeof(PositionMessage_t));
+  uint8_t bytes[sizeof(PositionMessage_t)];
+  buddyLattitudeData = message.structure.lattitude;
+  buddyLongitudeData = message.structure.longitude;
+  buddyId = message.structure.id;
   Radio.Sleep();
   radioState = WAIT;
 }
 
 void transmitReceivePosition()
 {
-  uint32_t currentTime = Air530.time.value();
-  if (Air530.location.isValid() && currentTime > nextTransmissionTime)
+  uint32_t currentTime = millis();
+  if (radioState != TX && currentTime > nextTransmissionTime)
   {
-    if (radioState != TX)
-    {
-      radioState = TX;
-      uint8_t data[TRANSMISSION_SIZE];
-      double lattitude = Air530.location.lat();
-      double longitude = Air530.location.lng();
-      for (size_t i = 0; i < sizeof lattitude; i++)
-      {
-        data[i] = ((byte *)&lattitude)[i];
-      }
-      for (size_t i = 0; i < sizeof longitude; i++)
-      {
-        data[i + sizeof lattitude] = ((byte *)&longitude)[i];
-      }
-      nextTransmissionTime = currentTime + (random(20) + MIN_DELAY_BETWEEN_TRANSMISSIONS) * 1000;
-      Radio.Send(data, sizeof lattitude + sizeof longitude);
-    }
+    radioState = TX;
+    TransmitPositionMessage_t message;
+    message.structure.lattitude = Air530.location.lat();
+    message.structure.longitude = Air530.location.lng();
+    message.structure.id = getID();
+    nextTransmissionTime = currentTime + (random(MIN_DELAY_BETWEEN_TRANSMISSIONS_SEC) + MIN_DELAY_BETWEEN_TRANSMISSIONS_SEC) * 1000;
+    transmissionEndTime = currentTime + TX_TIMEOUT_VALUE;
+    byte len = sizeof(PositionMessage_t);
+    uint8_t rxpacket[len];
+    memcpy(rxpacket, message.byteArray, len);
+    Radio.Send(rxpacket, len);
   }
-  else
+  if (radioState != RX && currentTime > transmissionEndTime)
   {
-    if (radioState != RX)
-    {
-      radioState = RX;
-      Radio.Rx(0);
-    }
+    radioState = RX;
+    Radio.Rx(0);
   }
 }
 
@@ -198,7 +212,8 @@ int fracPart(double val, int n)
   return abs((int)((val - (int)(val)) * pow(10, n)));
 }
 
-struct Button {
+struct Button
+{
   const uint8_t PIN;
   unsigned long lastFire = 0;
   uint32_t numberKeyPresses;
@@ -206,8 +221,10 @@ struct Button {
 
 Button button = {GPIO7, 0, false};
 
-void onButtonPress() {
-  if ((millis() - button.lastFire) > 200) {
+void onButtonPress()
+{
+  if ((millis() - button.lastFire) > 200)
+  {
     button.lastFire = millis();
     button.numberKeyPresses += 1;
   }
@@ -233,7 +250,7 @@ void render()
   str[index] = 0;
   drawString(98, 0, str);
 
-  if (button.numberKeyPresses % 2 == 0)
+  if (button.numberKeyPresses % 2 == 1)
   {
     index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
     str[index] = 0;
@@ -247,16 +264,16 @@ void render()
                     fracPart(longitude, 4));
     drawString(0, 32, str);
   }
-  else if (button.numberKeyPresses % 2 == 1)
+  else if (button.numberKeyPresses % 2 == 0)
   {
     if (buddyLattitudeData != 0)
     {
-      uint32_t chipID = (uint32_t)(getID() >> 32);
       char *name;
       bool found = false;
       for (uint8_t i = 0; i < sizeof(KNOWN_USERS) / sizeof(UsersDictionary_t); ++i)
       {
-        if (KNOWN_USERS[i].id == chipID)
+        int diff = KNOWN_USERS[i].id - buddyId;
+        if (diff == 0)
         {
           name = KNOWN_USERS[i].name;
           found = true;
@@ -265,8 +282,8 @@ void render()
       }
       if (!found)
       {
-        char id[4];
-        sprintf(id, "%04X", chipID);
+        char id[8];
+        sprintf(id, "%X", buddyId);
         name = id;
       }
 
@@ -293,6 +310,7 @@ void render()
 /***
  * SETUP AND LOOP
  */
+static RadioEvents_t RadioEvents;
 void setup()
 {
   Serial.begin(115200);
@@ -308,6 +326,8 @@ void setup()
   RadioEvents.TxDone = OnTxDone;
   RadioEvents.TxTimeout = OnTxTimeout;
   RadioEvents.RxDone = OnRxDone;
+  RadioEvents.RxTimeout = OnRxTimeout;
+  RadioEvents.RxError = OnRxError;
   Radio.Init(&RadioEvents);
   Radio.SetChannel(RF_FREQUENCY);
   Radio.SetTxConfig(MODEM_LORA, TX_OUTPUT_POWER, 0, LORA_BANDWIDTH,

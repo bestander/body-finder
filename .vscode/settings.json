@@ -6,6 +6,9 @@
         "array": "cpp",
         "ios": "cpp",
         "random": "cpp",
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "bitset": "cpp",
+        "__locale": "cpp",
+        "thread": "cpp"
     }
 }
