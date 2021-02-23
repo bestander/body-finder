@@ -5,11 +5,10 @@
 #include <QMC5883LCompass.h>
 
 // TODO
-// - bearing to direction UI - along perimeter draw a triangle
-// - bearing to direction between gps positions
 // - support multiple buddies
-// - display time last
+// - display time last seen
 // - make nice transitions
+// - add calibration instructions
 
 /***
  * Radio section START 
@@ -51,7 +50,7 @@ typedef struct
   uint32_t lastSeen;
 } BuddiesDictionary_t;
 const BuddiesDictionary_t buddies[5]{
-    {0xA6A70E30, 47.5269, -122.1482, 0},
+    {0, 0, 0, 0},
     {0, 0, 0, 0},
     {0, 0, 0, 0},
     {0, 0, 0, 0},
@@ -147,8 +146,8 @@ void transmitReceivePosition()
  */
 #define DISPLAY_I2C_ADDRESS 0x0C
 #define COMPASS_I2C_ADDRESS 0x0D
-byte myAzimuth;
 QMC5883LCompass compass;
+int16_t myAzimuth;
 
 void readCompass()
 {
@@ -250,39 +249,39 @@ void onButtonPress()
 
 void renderDirection(double courseToBuddy)
 {
-  int azimuthOfBuddy = myAzimuth + courseToBuddy;
+  int azimuthOfBuddy = myAzimuth + (int)courseToBuddy;
   byte bearing = compass.getBearing(azimuthOfBuddy % 360);
   // project bearing onto a square around buddy name
   byte bearingX = 0;
   byte bearingY = 0;
-  switch (myAzimuth)
+  switch (bearing)
   {
   case 0:
     bearingX = 60;
     bearingY = 20;
     break;
   case 1:
-    bearingX = 80;
+    bearingX = 40;
     bearingY = 20;
     break;
   case 2:
-    bearingX = 100;
+    bearingX = 20;
     bearingY = 20;
     break;
   case 3:
-    bearingX = 100;
+    bearingX = 20;
     bearingY = 30;
     break;
   case 4:
-    bearingX = 100;
+    bearingX = 20;
     bearingY = 40;
     break;
   case 5:
-    bearingX = 100;
+    bearingX = 20;
     bearingY = 60;
     break;
   case 6:
-    bearingX = 80;
+    bearingX = 40;
     bearingY = 60;
     break;
   case 7:
@@ -290,31 +289,31 @@ void renderDirection(double courseToBuddy)
     bearingY = 60;
     break;
   case 8:
-    bearingX = 40;
+    bearingX = 80;
     bearingY = 60;
     break;
   case 9:
-    bearingX = 20;
+    bearingX = 100;
     bearingY = 60;
     break;
   case 10:
-    bearingX = 20;
+    bearingX = 100;
     bearingY = 50;
     break;
   case 11:
-    bearingX = 20;
+    bearingX = 100;
     bearingY = 40;
     break;
   case 12:
-    bearingX = 20;
+    bearingX = 100;
     bearingY = 30;
     break;
   case 13:
-    bearingX = 20;
+    bearingX = 100;
     bearingY = 20;
     break;
   case 14:
-    bearingX = 30;
+    bearingX = 60;
     bearingY = 20;
     break;
   case 15:
@@ -441,6 +440,7 @@ void setup()
   radioState = WAIT;
   Air530.begin();
   compass.init();
+  compass.setCalibration(-2057, 1285, -2148, 1220, -1757, 1462);  
   pinMode(button.PIN, INPUT_PULLUP);
   attachInterrupt(button.PIN, onButtonPress, FALLING);
 }
