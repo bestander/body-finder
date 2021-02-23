@@ -4,6 +4,13 @@
 #include "cubecell_SSD1306Wire.h"
 #include <QMC5883LCompass.h>
 
+// TODO
+// - bearing to direction UI - along perimeter draw a triangle
+// - bearing to direction between gps positions
+// - support multiple buddies
+// - display time last
+// - make nice transitions
+
 /***
  * Radio section START 
  */
@@ -36,8 +43,20 @@ const UsersDictionary_t KNOWN_USERS[]{
 #define LORA_IQ_INVERSION_ON false
 #define RX_TIMEOUT_VALUE 1000
 
-double buddyLattitudeData, buddyLongitudeData;
-uint64_t buddyId;
+typedef struct
+{
+  uint64_t id;
+  double longitude;
+  double lattitude;
+  uint32_t lastSeen;
+} BuddiesDictionary_t;
+const BuddiesDictionary_t buddies[5]{
+    {0xA6A70E30, 47.5269, -122.1482, 0},
+    {0, 0, 0, 0},
+    {0, 0, 0, 0},
+    {0, 0, 0, 0},
+    {0, 0, 0, 0},
+};
 
 typedef enum
 {
@@ -91,9 +110,10 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
   TransmitPositionMessage_t message;
   memcpy(message.byteArray, payload, sizeof(PositionMessage_t));
   uint8_t bytes[sizeof(PositionMessage_t)];
-  buddyLattitudeData = message.structure.lattitude;
-  buddyLongitudeData = message.structure.longitude;
-  buddyId = message.structure.id;
+  BuddiesDictionary_t buddy = buddies[0];
+  buddy.id = message.structure.id;
+  buddy.lattitude = message.structure.lattitude;
+  buddy.longitude = message.structure.longitude;
   Radio.Sleep();
   radioState = WAIT;
 }
@@ -127,7 +147,7 @@ void transmitReceivePosition()
  */
 #define DISPLAY_I2C_ADDRESS 0x0C
 #define COMPASS_I2C_ADDRESS 0x0D
-byte myBearing;
+byte myAzimuth;
 QMC5883LCompass compass;
 
 void readCompass()
@@ -136,10 +156,8 @@ void readCompass()
   Wire.endTransmission();
   Wire.beginTransmission(COMPASS_I2C_ADDRESS);
   compass.read();
-  // Output here will be a value from 0 - 15 based on the direction of the bearing / azimuth.
-  myBearing = compass.getBearing(compass.getAzimuth());
+  myAzimuth = compass.getAzimuth();
   Wire.endTransmission();
-  // start display
   Wire.beginTransmission(DISPLAY_I2C_ADDRESS);
 }
 
@@ -230,6 +248,83 @@ void onButtonPress()
   }
 }
 
+void renderDirection(double courseToBuddy)
+{
+  int azimuthOfBuddy = myAzimuth + courseToBuddy;
+  byte bearing = compass.getBearing(azimuthOfBuddy % 360);
+  // project bearing onto a square around buddy name
+  byte bearingX = 0;
+  byte bearingY = 0;
+  switch (myAzimuth)
+  {
+  case 0:
+    bearingX = 60;
+    bearingY = 20;
+    break;
+  case 1:
+    bearingX = 80;
+    bearingY = 20;
+    break;
+  case 2:
+    bearingX = 100;
+    bearingY = 20;
+    break;
+  case 3:
+    bearingX = 100;
+    bearingY = 30;
+    break;
+  case 4:
+    bearingX = 100;
+    bearingY = 40;
+    break;
+  case 5:
+    bearingX = 100;
+    bearingY = 60;
+    break;
+  case 6:
+    bearingX = 80;
+    bearingY = 60;
+    break;
+  case 7:
+    bearingX = 60;
+    bearingY = 60;
+    break;
+  case 8:
+    bearingX = 40;
+    bearingY = 60;
+    break;
+  case 9:
+    bearingX = 20;
+    bearingY = 60;
+    break;
+  case 10:
+    bearingX = 20;
+    bearingY = 50;
+    break;
+  case 11:
+    bearingX = 20;
+    bearingY = 40;
+    break;
+  case 12:
+    bearingX = 20;
+    bearingY = 30;
+    break;
+  case 13:
+    bearingX = 20;
+    bearingY = 20;
+    break;
+  case 14:
+    bearingX = 30;
+    bearingY = 20;
+    break;
+  case 15:
+    bearingX = 40;
+    bearingY = 20;
+    break;
+  }
+  display.drawCircle(bearingX, bearingY, 3);
+}
+
 void render()
 {
   char str[30];
@@ -266,6 +361,9 @@ void render()
   }
   else if (button.numberKeyPresses % 2 == 0)
   {
+    double buddyLattitudeData = buddies[0].lattitude;
+    double buddyLongitudeData = buddies[0].longitude;
+    uint64_t buddyId = buddies[0].id;
     if (buddyLattitudeData != 0)
     {
       char *name;
@@ -290,17 +388,19 @@ void render()
       index = sprintf(str, "%s", name);
       display.setTextAlignment(TEXT_ALIGN_CENTER);
       display.setFont(ArialMT_Plain_16);
-      drawString(64, 32 - 16 / 2, str);
+      drawString(64, 24, str);
 
       double lattitude = Air530.location.lat();
       double longitude = Air530.location.lng();
-      // double TinyGPSPlus::courseTo(double lat1, double long1, double lat2, double long2)
       double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
 
       display.setFont(ArialMT_Plain_10);
-      index = sprintf(str, "%d m bearing: %d", (int)distance, (int)myBearing);
+      index = sprintf(str, "%d m", (int)distance);
       str[index] = 0;
-      drawString(64, 48 - 10 / 2, str);
+      drawString(64, 42, str);
+
+      double courseToBuddy = TinyGPSPlus::courseTo(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
+      renderDirection(courseToBuddy);
     }
   }
 
