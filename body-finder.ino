@@ -50,7 +50,7 @@ typedef struct
   uint32_t lastSeen;
 } BuddiesDictionary_t;
 const BuddiesDictionary_t buddies[5]{
-    {0xA6A70E30, 47.12, -122.24, 0},
+    {0, 0, 0, 0},
     {0, 0, 0, 0},
     {0, 0, 0, 0},
     {0, 0, 0, 0},
