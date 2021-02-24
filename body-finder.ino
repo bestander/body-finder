@@ -50,7 +50,7 @@ typedef struct
   uint32_t lastSeen;
 } BuddiesDictionary_t;
 const BuddiesDictionary_t buddies[5]{
-    {0, 0, 0, 0},
+    {0xA6A70E30, 47.12, -122.24, 0},
     {0, 0, 0, 0},
     {0, 0, 0, 0},
     {0, 0, 0, 0},
@@ -250,78 +250,10 @@ void onButtonPress()
 void renderDirection(double courseToBuddy)
 {
   int azimuthOfBuddy = myAzimuth + (int)courseToBuddy;
-  byte bearing = compass.getBearing(azimuthOfBuddy % 360);
-  // project bearing onto a square around buddy name
-  byte bearingX = 0;
-  byte bearingY = 0;
-  switch (bearing)
-  {
-  case 0:
-    bearingX = 60;
-    bearingY = 20;
-    break;
-  case 1:
-    bearingX = 40;
-    bearingY = 20;
-    break;
-  case 2:
-    bearingX = 20;
-    bearingY = 20;
-    break;
-  case 3:
-    bearingX = 20;
-    bearingY = 30;
-    break;
-  case 4:
-    bearingX = 20;
-    bearingY = 40;
-    break;
-  case 5:
-    bearingX = 20;
-    bearingY = 60;
-    break;
-  case 6:
-    bearingX = 40;
-    bearingY = 60;
-    break;
-  case 7:
-    bearingX = 60;
-    bearingY = 60;
-    break;
-  case 8:
-    bearingX = 80;
-    bearingY = 60;
-    break;
-  case 9:
-    bearingX = 100;
-    bearingY = 60;
-    break;
-  case 10:
-    bearingX = 100;
-    bearingY = 50;
-    break;
-  case 11:
-    bearingX = 100;
-    bearingY = 40;
-    break;
-  case 12:
-    bearingX = 100;
-    bearingY = 30;
-    break;
-  case 13:
-    bearingX = 100;
-    bearingY = 20;
-    break;
-  case 14:
-    bearingX = 60;
-    bearingY = 20;
-    break;
-  case 15:
-    bearingX = 40;
-    bearingY = 20;
-    break;
-  }
-  display.drawCircle(bearingX, bearingY, 3);
+  double radians = azimuthOfBuddy * 1000 / 57296;
+  double bearingX = -sin(radians) * 40 + 65;
+  double bearingY = -cos(radians) * 20 + 40;
+  display.drawCircle((int)bearingX, (int)bearingY, 3);
 }
 
 void render()
@@ -440,7 +372,7 @@ void setup()
   radioState = WAIT;
   Air530.begin();
   compass.init();
-  compass.setCalibration(-2057, 1285, -2148, 1220, -1757, 1462);  
+  compass.setCalibration(-2057, 1285, -2148, 1220, -1757, 1462);
   pinMode(button.PIN, INPUT_PULLUP);
   attachInterrupt(button.PIN, onButtonPress, FALLING);
 }
