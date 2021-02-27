@@ -49,13 +49,7 @@ typedef struct
   double lattitude;
   uint32_t lastSeen;
 } BuddiesDictionary_t;
-const BuddiesDictionary_t buddies[5]{
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-    {0, 0, 0, 0},
-};
+BuddiesDictionary_t buddies[5];
 
 typedef enum
 {
@@ -103,17 +97,25 @@ typedef union
   uint8_t byteArray[sizeof(PositionMessage_t)];
 } TransmitPositionMessage_t;
 
+void printByteArrayAsHex(uint8_t *payload, uint16_t size)
+{
+  for (int i = 0; i < size; i++)
+  {
+    Serial.printf("%02X", payload[i]);
+  }
+  Serial.println("");
+}
+
 void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-  Serial.printf("OnRxDone length %d\r\n", size);
+  Serial.print("OnRxDone: ");
+  printByteArrayAsHex(payload, size);
+
   TransmitPositionMessage_t message;
-  memcpy(message.byteArray, payload, sizeof(PositionMessage_t));
-  uint8_t bytes[sizeof(PositionMessage_t)];
-  BuddiesDictionary_t buddy = buddies[0];
-  buddy.id = message.structure.id;
-  buddy.lattitude = message.structure.lattitude;
-  buddy.longitude = message.structure.longitude;
-  Radio.Sleep();
+  memcpy(message.byteArray, payload, size);
+  buddies[0].id = message.structure.id;
+  buddies[0].lattitude = message.structure.lattitude;
+  buddies[0].longitude = message.structure.longitude;
   radioState = WAIT;
 }
 
@@ -132,6 +134,8 @@ void transmitReceivePosition()
     byte len = sizeof(PositionMessage_t);
     uint8_t rxpacket[len];
     memcpy(rxpacket, message.byteArray, len);
+    Serial.print("Transmitting: ");
+    printByteArrayAsHex(rxpacket, len);
     Radio.Send(rxpacket, len);
   }
   if (radioState != RX && currentTime > transmissionEndTime)
