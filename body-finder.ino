@@ -21,7 +21,9 @@ typedef struct
 
 const UsersDictionary_t KNOWN_USERS[]{
     {0xA6A70E30, "USER1"},
-    {0xA6A70F27, "USER2"}};
+    {0xA6A70F27, "USER2"},
+    {0xA6A70F3D, "USER3"},
+    {0xA6A71B2C, "USER4"}};
 
 #define MIN_DELAY_BETWEEN_TRANSMISSIONS_SEC 10
 #define RF_FREQUENCY 915000000   // Hz
@@ -97,6 +99,19 @@ typedef union
   uint8_t byteArray[sizeof(PositionMessage_t)];
 } TransmitPositionMessage_t;
 
+int getBuddiesCount()
+{
+  int i;
+  for (i = 0; i < sizeof(buddies) / sizeof(BuddiesDictionary_t); i++)
+  {
+    if (buddies[i].id == 0)
+    {
+      return i;
+    }
+  }
+  return i;
+}
+
 void printByteArrayAsHex(uint8_t *payload, uint16_t size)
 {
   for (int i = 0; i < size; i++)
@@ -113,9 +128,18 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
   TransmitPositionMessage_t message;
   memcpy(message.byteArray, payload, size);
-  buddies[0].id = message.structure.id;
-  buddies[0].lattitude = message.structure.lattitude;
-  buddies[0].longitude = message.structure.longitude;
+  int i = 0;
+  for (i = 0; i < sizeof(buddies) / sizeof(BuddiesDictionary_t); i++)
+  {
+    if (buddies[i].id == 0 || buddies[i].id == message.structure.id)
+    {
+      buddies[i].id = message.structure.id;
+      buddies[i].lattitude = message.structure.lattitude;
+      buddies[i].longitude = message.structure.longitude;
+      buddies[i].lastSeen = millis();
+      break;
+    }
+  }
   radioState = WAIT;
 }
 
@@ -251,15 +275,6 @@ void onButtonPress()
   }
 }
 
-void renderDirection(double courseToBuddy)
-{
-  int azimuthOfBuddy = myAzimuth + (int)courseToBuddy;
-  double radians = azimuthOfBuddy * 1000 / 57296;
-  double bearingX = -sin(radians) * 40 + 65;
-  double bearingY = -cos(radians) * 20 + 40;
-  display.drawCircle((int)bearingX, (int)bearingY, 3);
-}
-
 void render()
 {
   char str[30];
@@ -280,7 +295,10 @@ void render()
   str[index] = 0;
   drawString(98, 0, str);
 
-  if (button.numberKeyPresses % 2 == 1)
+  int buddyCount = getBuddiesCount();
+  // first N screens are buddies coordinates, last screen is own settings,
+  int uiScreenIndex = button.numberKeyPresses % (buddyCount + 1);
+  if (uiScreenIndex == buddyCount)
   {
     index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
     str[index] = 0;
@@ -294,13 +312,32 @@ void render()
                     fracPart(longitude, 4));
     drawString(0, 32, str);
   }
-  else if (button.numberKeyPresses % 2 == 0)
+  else
   {
-    double buddyLattitudeData = buddies[0].lattitude;
-    double buddyLongitudeData = buddies[0].longitude;
-    uint64_t buddyId = buddies[0].id;
-    if (buddyLattitudeData != 0)
+    BuddiesDictionary_t buddy = buddies[uiScreenIndex];
+    uint64_t buddyId = buddy.id;
+    if (buddyId != 0)
     {
+      double buddyLattitudeData = buddy.lattitude;
+      double buddyLongitudeData = buddy.longitude;
+      double lattitude = Air530.location.lat();
+      double longitude = Air530.location.lng();
+      double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
+
+      display.setTextAlignment(TEXT_ALIGN_LEFT);
+      display.setFont(ArialMT_Plain_24);
+      if (distance > 1000)
+      {
+        double distanceKm = distance / 1000;
+        index = sprintf(str, "%d.%dkm", (int)(distanceKm), fracPart(distanceKm, 2));
+      }
+      else
+      {
+        index = sprintf(str, "%dm", (int)distance);
+      }
+      str[index] = 0;
+      drawString(0, 20, str);
+
       char *name;
       bool found = false;
       for (uint8_t i = 0; i < sizeof(KNOWN_USERS) / sizeof(UsersDictionary_t); ++i)
@@ -320,24 +357,24 @@ void render()
         name = id;
       }
 
-      index = sprintf(str, "%s", name);
-      display.setTextAlignment(TEXT_ALIGN_CENTER);
-      display.setFont(ArialMT_Plain_16);
-      drawString(64, 24, str);
-
-      double lattitude = Air530.location.lat();
-      double longitude = Air530.location.lng();
-      double distance = TinyGPSPlus::distanceBetween(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
-
+      display.setTextAlignment(TEXT_ALIGN_RIGHT);
       display.setFont(ArialMT_Plain_10);
-      index = sprintf(str, "%d m", (int)distance);
-      str[index] = 0;
-      drawString(64, 42, str);
+      index = sprintf(str, "%s", name);
+      drawString(128, 18, str);
 
       double courseToBuddy = TinyGPSPlus::courseTo(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
-      renderDirection(courseToBuddy);
+      int azimuthOfBuddy = myAzimuth + (int)courseToBuddy;
+      index = sprintf(str, "%d deg", azimuthOfBuddy);
+      drawString(128, 32, str);
+
+      index = sprintf(str, "%d sec ago", (int)(millis() - buddy.lastSeen) / 1000);
+      drawString(128, 46, str);
     }
   }
+
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  index = sprintf(str, "%d/%d", uiScreenIndex + 1, buddyCount + 1);
+  drawString(0, 48, str);
 
   display.display();
 }
