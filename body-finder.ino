@@ -4,12 +4,6 @@
 #include "cubecell_SSD1306Wire.h"
 #include <QMC5883LCompass.h>
 
-// TODO
-// - support multiple buddies
-// - display time last seen
-// - make nice transitions
-// - add calibration instructions
-
 /***
  * Radio section START 
  */
@@ -24,6 +18,16 @@ const UsersDictionary_t KNOWN_USERS[]{
     {0xA6A70F27, "USER2"},
     {0xA6A70F3D, "USER3"},
     {0xA6A71B2C, "USER4"}};
+
+#define MY_USER_NAME "USER4"
+
+// every new compass needs fresh calibration
+#define COMPAS_CALIBRATION_X_MIN -1617
+#define COMPAS_CALIBRATION_X_MAX 395
+#define COMPAS_CALIBRATION_Y_MIN -2281
+#define COMPAS_CALIBRATION_Y_MAX 1207
+#define COMPAS_CALIBRATION_Z_MIN -1877
+#define COMPAS_CALIBRATION_Z_MAX 1465
 
 #define MIN_DELAY_BETWEEN_TRANSMISSIONS_SEC 10
 #define RF_FREQUENCY 915000000   // Hz
@@ -128,6 +132,11 @@ void OnRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 
   TransmitPositionMessage_t message;
   memcpy(message.byteArray, payload, size);
+  if (message.structure.id == getID())
+  {
+    // ignore own messages
+    return;
+  }
   int i = 0;
   for (i = 0; i < sizeof(buddies) / sizeof(BuddiesDictionary_t); i++)
   {
@@ -300,7 +309,7 @@ void render()
   int uiScreenIndex = button.numberKeyPresses % (buddyCount + 1);
   if (uiScreenIndex == buddyCount)
   {
-    index = sprintf(str, "%02d:%02d:%02d", Air530.time.hour(), Air530.time.minute(), Air530.time.second());
+    index = sprintf(str, "%s %02d:%02d:%02d", MY_USER_NAME, Air530.time.hour(), Air530.time.minute(), Air530.time.second());
     str[index] = 0;
     drawString(30, 16, str);
     double lattitude = Air530.location.lat();
@@ -326,7 +335,11 @@ void render()
 
       display.setTextAlignment(TEXT_ALIGN_LEFT);
       display.setFont(ArialMT_Plain_24);
-      if (distance > 1000)
+      if ((int)distance > 100000)
+      {
+        index = sprintf(str, "GPS ???");
+      }
+      else if ((int)distance > 1000)
       {
         double distanceKm = distance / 1000;
         index = sprintf(str, "%d.%dkm", (int)(distanceKm), fracPart(distanceKm, 2));
@@ -363,7 +376,7 @@ void render()
       drawString(128, 18, str);
 
       double courseToBuddy = TinyGPSPlus::courseTo(lattitude, longitude, buddyLattitudeData, buddyLongitudeData);
-      int azimuthOfBuddy = myAzimuth + (int)courseToBuddy;
+      int azimuthOfBuddy = (myAzimuth + (int)courseToBuddy) % 360;
       index = sprintf(str, "%d deg", azimuthOfBuddy);
       drawString(128, 32, str);
 
@@ -413,7 +426,13 @@ void setup()
   radioState = WAIT;
   Air530.begin();
   compass.init();
-  compass.setCalibration(-2057, 1285, -2148, 1220, -1757, 1462);
+  compass.setCalibration(
+      COMPAS_CALIBRATION_X_MIN,
+      COMPAS_CALIBRATION_X_MAX,
+      COMPAS_CALIBRATION_Y_MIN,
+      COMPAS_CALIBRATION_Y_MAX,
+      COMPAS_CALIBRATION_Z_MIN,
+      COMPAS_CALIBRATION_Z_MAX);
   pinMode(button.PIN, INPUT_PULLUP);
   attachInterrupt(button.PIN, onButtonPress, FALLING);
 }
